@@ -7,6 +7,7 @@ Automated deployment of a production-ready OpenVPN server on DigitalOcean using 
 - **One-command deployment** — provision VPS and install OpenVPN automatically
 - **Automatic PKI** — EasyRSA 3 manages CA, server, and client certificates
 - **Client management** — add and revoke clients with a single command
+- **Cloudflare DNS** — automatically creates/updates a subdomain A record after VPS provisioning
 - **Custom domain support** — use your own domain or fall back to the server IP
 - **Inline .ovpn files** — all certificates embedded for easy distribution
 - **OpenVPN updates** — update to the latest version with one command
@@ -195,6 +196,56 @@ Run `make help` to see all commands. Common ones:
 | `s-1vcpu-1gb` | 1 | 1GB | ~$6 | 1-5 users |
 | `s-1vcpu-2gb` | 1 | 2GB | ~$12 | 5-20 users |
 | `s-2vcpu-2gb` | 2 | 2GB | ~$18 | 20-50 users |
+
+---
+
+## Cloudflare DNS Integration
+
+Automatically point a subdomain of your existing Cloudflare-managed domain at the new VPS.
+
+### How It Works
+
+1. Terraform provisions the Droplet and gets its IP
+2. Terraform calls the Cloudflare API to create/update an A record: `<subdomain>.<domain>` → server IP
+3. The FQDN is injected into the Ansible inventory automatically
+4. Ansible uses the domain in `server.conf` and all generated client `.ovpn` files
+5. All clients connect via domain name — no need to update configs if you recreate the VPS
+
+### Setup
+
+1. **Create a Cloudflare API token** with `Zone:DNS:Edit` permission:
+   - Go to [Cloudflare API Tokens](https://dash.cloudflare.com/profile/api-tokens)
+   - Click "Create Token" → use the "Edit zone DNS" template
+   - Scope it to your specific zone (recommended over Global API Key)
+
+2. **Get your Zone ID**:
+   - Open your domain in Cloudflare dashboard
+   - Look at the right sidebar of the Overview page → "Zone ID"
+
+3. **Configure `terraform/terraform.tfvars`**:
+   ```hcl
+   cloudflare_enabled   = true
+   cloudflare_api_token = "your_token_here"
+   cloudflare_zone_id   = "your_zone_id_here"
+   cloudflare_domain    = "example.com"
+   cloudflare_subdomain = "vpn"       # → creates vpn.example.com
+   ```
+
+4. **Deploy as normal**:
+   ```bash
+   make deploy
+   ```
+   The DNS record is created automatically. The completion message will confirm:
+   ```
+   [OK]   Cloudflare DNS record created: vpn.example.com → 1.2.3.4
+   ```
+
+### Important Notes
+
+- **Do not enable Cloudflare proxying** (orange cloud) — OpenVPN uses raw UDP which cannot pass through Cloudflare's HTTP proxy. The A record is always created with `proxied = false`.
+- **DNS propagation**: Allow ~1 minute after deployment before connecting with the domain-based config (TTL is set to 60 seconds).
+- **Recreating the VPS**: Run `terraform apply` — the A record updates automatically to the new IP.
+- **Changing the subdomain**: Update `cloudflare_subdomain` in `terraform.tfvars` and run `terraform apply`. The old record is deleted and the new one created in one step.
 
 ---
 

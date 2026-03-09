@@ -100,6 +100,15 @@ run_terraform() {
     SERVER_IP=$(terraform output -raw server_ip)
     log_success "VPS provisioned at: ${SERVER_IP}"
 
+    # Auto-read FQDN from Terraform if Cloudflare was enabled and no --domain flag given
+    if [[ -z "${DOMAIN}" ]]; then
+        DOMAIN=$(terraform output -raw server_fqdn 2>/dev/null || true)
+        if [[ -n "${DOMAIN}" ]]; then
+            log_success "Cloudflare DNS record created: ${DOMAIN} → ${SERVER_IP}"
+            log_info "Auto-using domain for OpenVPN config: ${DOMAIN}"
+        fi
+    fi
+
     log_info "Waiting 30 seconds for server to fully boot..."
     sleep 30
 
@@ -110,15 +119,13 @@ run_ansible() {
     log_info "Running Ansible to configure OpenVPN..."
     cd "${ANSIBLE_DIR}"
 
-    local extra_vars=""
-    if [[ -n "${DOMAIN}" ]]; then
-        extra_vars="openvpn_server_domain=${DOMAIN}"
-        log_info "Using domain: ${DOMAIN}"
-    fi
-
+    # Domain is already injected into the inventory as a host var by Terraform
+    # when Cloudflare is enabled. Pass via --extra-vars only when set via --domain flag
+    # (overrides the inventory value, useful for manual runs without Terraform).
     local ansible_args=("setup.yml")
-    if [[ -n "${extra_vars}" ]]; then
-        ansible_args+=("--extra-vars" "${extra_vars}")
+    if [[ -n "${DOMAIN}" ]]; then
+        log_info "Using server domain: ${DOMAIN}"
+        ansible_args+=("--extra-vars" "openvpn_server_domain=${DOMAIN}")
     fi
 
     ansible-playbook "${ansible_args[@]}"
@@ -196,5 +203,9 @@ echo " Deployment Complete!"
 echo "=============================================="
 echo -e "${NC}"
 log_success "OpenVPN server is ready!"
+if [[ -n "${DOMAIN}" ]]; then
+    log_info "Server domain: ${DOMAIN}"
+    log_info "Note: Allow 1-2 minutes for DNS propagation before connecting."
+fi
 log_info "To add a client: make add-client CLIENT=mydevice"
 log_info "         or:     ./scripts/add-client.sh mydevice"

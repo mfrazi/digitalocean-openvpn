@@ -5,6 +5,10 @@ terraform {
       source  = "digitalocean/digitalocean"
       version = "~> 2.0"
     }
+    cloudflare = {
+      source  = "cloudflare/cloudflare"
+      version = "~> 4.0"
+    }
   }
 }
 
@@ -12,10 +16,23 @@ provider "digitalocean" {
   token = var.do_token
 }
 
+provider "cloudflare" {
+  api_token = var.cloudflare_api_token
+}
+
 # SSH Key for the droplet
 resource "digitalocean_ssh_key" "openvpn" {
   name       = "${var.project_name}-key"
   public_key = file(var.ssh_public_key_path)
+}
+
+# Computed values
+locals {
+  # Effective IP: reserved IP if enabled, otherwise droplet's IP
+  server_ip = var.use_reserved_ip ? digitalocean_reserved_ip.openvpn[0].ip_address : digitalocean_droplet.openvpn.ipv4_address
+
+  # Full domain name when Cloudflare is enabled
+  server_fqdn = var.cloudflare_enabled ? "${var.cloudflare_subdomain}.${var.cloudflare_domain}" : ""
 }
 
 # Cloud-init script to bootstrap the droplet
@@ -116,14 +133,32 @@ resource "digitalocean_reserved_ip_assignment" "openvpn" {
   droplet_id = digitalocean_droplet.openvpn.id
 }
 
+# Dependency: Cloudflare record must wait for reserved IP assignment if both are enabled
+# (handled implicitly via local.server_ip referencing the reserved IP resource)
+
 # Generate Ansible inventory file
 resource "local_file" "ansible_inventory" {
   content = templatefile("${path.module}/inventory.tpl", {
-    server_ip   = var.use_reserved_ip ? digitalocean_reserved_ip.openvpn[0].ip_address : digitalocean_droplet.openvpn.ipv4_address
-    server_name = digitalocean_droplet.openvpn.name
-    ssh_user    = var.ssh_user
-    ssh_key     = var.ssh_private_key_path
+    server_ip     = local.server_ip
+    server_name   = digitalocean_droplet.openvpn.name
+    ssh_user      = var.ssh_user
+    ssh_key       = var.ssh_private_key_path
+    server_domain = local.server_fqdn
   })
   filename        = "${path.module}/../ansible/inventory/hosts.ini"
   file_permission = "0644"
+}
+
+# ─── Cloudflare DNS Record ────────────────────────────────────────────────────
+
+resource "cloudflare_record" "openvpn" {
+  count   = var.cloudflare_enabled ? 1 : 0
+  zone_id = var.cloudflare_zone_id
+  name    = var.cloudflare_subdomain
+  content = local.server_ip
+  type    = "A"
+  ttl     = 60      # Low TTL for fast propagation on recreate
+  proxied = false   # Must be false — Cloudflare cannot proxy UDP/OpenVPN traffic
+
+  comment = "Managed by Terraform — OpenVPN server"
 }

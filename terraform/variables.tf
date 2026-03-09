@@ -69,3 +69,38 @@ variable "use_reserved_ip" {
   type        = bool
   default     = false
 }
+
+# =============================================================================
+# Cloudflare DNS (optional)
+# =============================================================================
+
+variable "cloudflare_enabled" {
+  description = "Whether to create/update a Cloudflare DNS A record pointing to the server"
+  type        = bool
+  default     = false
+}
+
+variable "cloudflare_api_token" {
+  description = "Cloudflare API token with DNS edit permissions for the target zone"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "cloudflare_zone_id" {
+  description = "Cloudflare Zone ID for the domain (find it on the domain's Overview page)"
+  type        = string
+  default     = ""
+}
+
+variable "cloudflare_domain" {
+  description = "Root domain managed in Cloudflare (e.g. 'example.com')"
+  type        = string
+  default     = ""
+}
+
+variable "cloudflare_subdomain" {
+  description = "Subdomain to point at the OpenVPN server (e.g. 'vpn' creates vpn.example.com)"
+  type        = string
+  default     = "vpn"
+}

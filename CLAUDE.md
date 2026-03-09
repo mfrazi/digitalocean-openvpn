@@ -75,6 +75,26 @@ roles/openvpn_server/
     └── sysctl-openvpn.conf.j2  # IP forwarding sysctl settings
 ```
 
+### Cloudflare DNS Integration (`terraform/`)
+
+The Cloudflare provider is conditionally activated via `cloudflare_enabled = true` in `terraform.tfvars`.
+
+| Resource / Output | Purpose |
+|-------------------|---------|
+| `cloudflare_record.openvpn` | A record for `<subdomain>.<domain>` pointing to the server IP |
+| `local.server_fqdn` | Computed FQDN: `"${subdomain}.${domain}"` or `""` if disabled |
+| `output.server_fqdn` | Exposes the FQDN for use by `deploy.sh` |
+| `inventory.tpl` | Injects `openvpn_server_domain=<fqdn>` as host var when domain is set |
+
+**Important**: `proxied = false` is intentional and must not be changed. Cloudflare's orange-cloud proxy only works for HTTP/HTTPS — it cannot forward UDP or arbitrary TCP, which OpenVPN requires.
+
+**Flow when Cloudflare is enabled:**
+1. Terraform provisions the Droplet → gets its IP
+2. Terraform creates the Cloudflare A record (`<subdomain>.<domain>` → IP)
+3. Terraform writes the FQDN into `ansible/inventory/hosts.ini` as `openvpn_server_domain`
+4. Ansible reads the domain from the inventory and uses it in `server.conf` and all future client `.ovpn` files
+5. `deploy.sh` reads `server_fqdn` from Terraform output and confirms it in the completion message
+
 ### Ansible Role: `openvpn_client`
 
 ```
@@ -147,6 +167,30 @@ openvpn_tls_version_min: "1.2"     # Minimum TLS version
    cd ansible && ansible-playbook update-openvpn.yml \
      --extra-vars "update_easyrsa=true new_easyrsa_version=3.1.7"
    ```
+
+### Enable / Update Cloudflare DNS
+
+To enable Cloudflare DNS for the first time, edit `terraform/terraform.tfvars`:
+```hcl
+cloudflare_enabled   = true
+cloudflare_api_token = "cf_token..."
+cloudflare_zone_id   = "zone_id..."
+cloudflare_domain    = "example.com"
+cloudflare_subdomain = "vpn"   # creates vpn.example.com
+```
+
+Then run `make plan` to review and `make deploy` (or `terraform apply`) to apply.
+
+To **change the subdomain** on an existing deployment:
+1. Update `cloudflare_subdomain` in `terraform.tfvars`
+2. Run `terraform apply` — Terraform will destroy the old record and create the new one
+3. Re-run Ansible to update `server.conf` and regenerate client `.ovpn` files:
+   ```bash
+   cd ansible && ansible-playbook setup.yml --tags configure
+   ```
+4. Distribute updated `.ovpn` files to all clients
+
+To **disable Cloudflare** without destroying the record, set `cloudflare_enabled = false` and run `terraform apply`. The record will be deleted from Cloudflare.
 
 ### Add a New DigitalOcean Region
 
@@ -272,3 +316,9 @@ The following are intentionally excluded from git:
 5. **Terraform inventory generation** — The `local_file` resource writes `ansible/inventory/hosts.ini`. If you destroy and recreate infrastructure, this file is regenerated automatically.
 
 6. **OpenVPN UDP vs TCP** — UDP is always primary. TCP is optional (`openvpn_enable_tcp`). Both the Terraform firewall and UFW rules need updating when TCP is enabled.
+
+7. **Cloudflare proxy must be disabled** — `proxied = false` in `cloudflare_record.openvpn` is not a mistake. Cloudflare's proxy (orange cloud) only handles HTTP/HTTPS. OpenVPN uses raw UDP (or TCP on a non-standard port), which the Cloudflare proxy cannot forward. If you enable proxying, clients will fail to connect.
+
+8. **DNS propagation delay** — After Terraform creates the Cloudflare record, allow 1-2 minutes before connecting with a domain-based client config. TTL is set to 60 seconds to minimize this.
+
+9. **Cloudflare API token scope** — The token needs only "Zone:DNS:Edit" permission scoped to the specific zone. Using a restricted token (not Global API Key) is recommended for security.

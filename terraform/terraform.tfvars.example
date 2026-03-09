@@ -36,3 +36,26 @@ openvpn_port_tcp    = 443
 # Use a DigitalOcean reserved IP (floating IP) for stable addressing
 # Useful if you plan to recreate the droplet without changing the client configs
 use_reserved_ip = false
+
+# =============================================================================
+# Cloudflare DNS (optional)
+# Automatically creates/updates a DNS A record after the VPS is provisioned.
+# =============================================================================
+
+# Set to true to enable Cloudflare DNS integration
+cloudflare_enabled = false
+
+# Cloudflare API token with "Zone:DNS:Edit" permission for your zone
+# Create one at: https://dash.cloudflare.com/profile/api-tokens
+# Use the "Edit zone DNS" template and scope it to your specific zone
+cloudflare_api_token = "your_cloudflare_api_token_here"
+
+# Cloudflare Zone ID — found on the domain's Overview page (right sidebar)
+cloudflare_zone_id = "your_cloudflare_zone_id_here"
+
+# Root domain managed in Cloudflare (must match the zone above)
+cloudflare_domain = "example.com"
+
+# Subdomain to create. Result: <subdomain>.<domain>
+# Example: "vpn" + "example.com" → vpn.example.com
+cloudflare_subdomain = "vpn"
