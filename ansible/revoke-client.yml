@@ -1,0 +1,36 @@
+---
+# =============================================================================
+# Revoke OpenVPN Client Playbook
+# Revokes a client certificate so it can no longer connect.
+#
+# Usage:
+#   ansible-playbook revoke-client.yml --extra-vars "client_name=mydevice"
+#   # Or using the helper script:
+#   ./scripts/revoke-client.sh mydevice
+# =============================================================================
+
+- name: Revoke OpenVPN Client
+  hosts: openvpn_servers
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+    - name: Validate client_name variable
+      fail:
+        msg: |
+          ERROR: 'client_name' is required.
+          Usage: ansible-playbook revoke-client.yml --extra-vars "client_name=mydevice"
+      when: client_name is not defined or client_name | length == 0
+
+    - name: Confirm revocation
+      pause:
+        prompt: |
+          WARNING: You are about to revoke client '{{ client_name }}'.
+          This will immediately disconnect the client and prevent future connections.
+          Press ENTER to continue or Ctrl+C to abort.
+      when: not (auto_confirm | default(false) | bool)
+
+  tasks:
+    - name: Revoke client certificate
+      include_tasks: "roles/openvpn_client/tasks/revoke.yml"
+      tags: [client, revoke]

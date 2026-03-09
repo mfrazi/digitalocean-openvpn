@@ -1,0 +1,38 @@
+# Copy this file to terraform.tfvars and fill in your values
+# cp terraform.tfvars.example terraform.tfvars
+
+# DigitalOcean API token (required)
+# Generate at: https://cloud.digitalocean.com/account/api/tokens
+do_token = "your_digitalocean_api_token_here"
+
+# Project name (used as prefix for all resources)
+project_name = "openvpn"
+
+# DigitalOcean region
+# Popular regions: nyc3, sfo3, ams3, sgp1, fra1, lon1, tor1, blr1, syd1
+droplet_region = "sgp1"
+
+# Droplet size
+# s-1vcpu-1gb  -> 1 CPU, 1GB RAM  (~$6/mo) - Suitable for small usage
+# s-1vcpu-2gb  -> 1 CPU, 2GB RAM  (~$12/mo) - Comfortable for medium usage
+# s-2vcpu-2gb  -> 2 CPU, 2GB RAM  (~$18/mo) - For higher throughput
+droplet_size = "s-1vcpu-1gb"
+
+# OS image (Ubuntu 22.04 LTS is recommended)
+droplet_image = "ubuntu-22-04-x64"
+
+# SSH key paths
+ssh_public_key_path  = "~/.ssh/id_rsa.pub"
+ssh_private_key_path = "~/.ssh/id_rsa"
+ssh_user             = "root"
+
+# OpenVPN UDP port (default 1194)
+openvpn_port = 1194
+
+# Enable TCP port for OpenVPN (useful for restrictive networks/firewalls)
+openvpn_enable_tcp  = false
+openvpn_port_tcp    = 443
+
+# Use a DigitalOcean reserved IP (floating IP) for stable addressing
+# Useful if you plan to recreate the droplet without changing the client configs
+use_reserved_ip = false

@@ -1,0 +1,75 @@
+---
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install required packages
+  apt:
+    name:
+      - openvpn
+      - ca-certificates
+      - curl
+      - wget
+      - gnupg
+      - ufw
+      - python3-pip
+      - openssl
+    state: present
+
+- name: Check current EasyRSA installation
+  stat:
+    path: "{{ easyrsa_install_dir }}/easyrsa"
+  register: easyrsa_installed
+
+- name: Get installed EasyRSA version
+  command: "{{ easyrsa_install_dir }}/easyrsa --version"
+  register: easyrsa_version_check
+  changed_when: false
+  failed_when: false
+  when: easyrsa_installed.stat.exists
+
+- name: Download EasyRSA {{ easyrsa_version }}
+  get_url:
+    url: "https://github.com/OpenVPN/easy-rsa/releases/download/v{{ easyrsa_version }}/EasyRSA-{{ easyrsa_version }}.tgz"
+    dest: "/tmp/easyrsa-{{ easyrsa_version }}.tgz"
+    mode: "0644"
+  when: >
+    not easyrsa_installed.stat.exists or
+    easyrsa_version not in (easyrsa_version_check.stdout | default(''))
+
+- name: Extract EasyRSA
+  unarchive:
+    src: "/tmp/easyrsa-{{ easyrsa_version }}.tgz"
+    dest: "/opt/"
+    remote_src: yes
+    creates: "/opt/EasyRSA-{{ easyrsa_version }}"
+  when: >
+    not easyrsa_installed.stat.exists or
+    easyrsa_version not in (easyrsa_version_check.stdout | default(''))
+
+- name: Symlink EasyRSA to standard path
+  file:
+    src: "/opt/EasyRSA-{{ easyrsa_version }}"
+    dest: "{{ easyrsa_install_dir }}"
+    state: link
+    force: yes
+
+- name: Create required directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0700"
+  loop:
+    - "{{ openvpn_server_dir }}"
+    - "{{ openvpn_clients_dir }}"
+    - "{{ openvpn_pki_dir }}"
+
+- name: Get installed OpenVPN version
+  command: openvpn --version
+  register: openvpn_installed_version
+  changed_when: false
+
+- name: Display installed OpenVPN version
+  debug:
+    msg: "OpenVPN version: {{ openvpn_installed_version.stdout_lines[0] }}"

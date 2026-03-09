@@ -1,0 +1,125 @@
+---
+# =============================================================================
+# Update OpenVPN Playbook
+# Updates OpenVPN to the latest available version and optionally updates EasyRSA.
+#
+# Usage:
+#   ansible-playbook update-openvpn.yml
+#   ansible-playbook update-openvpn.yml --extra-vars "update_easyrsa=true new_easyrsa_version=3.1.7"
+# =============================================================================
+
+- name: Update OpenVPN Server
+  hosts: openvpn_servers
+  become: true
+  gather_facts: true
+
+  vars:
+    update_easyrsa: false
+    new_easyrsa_version: "{{ easyrsa_version }}"
+
+  tasks:
+    - name: Get current OpenVPN version
+      command: openvpn --version
+      register: openvpn_before
+      changed_when: false
+
+    - name: Display current OpenVPN version
+      debug:
+        msg: "Current version: {{ openvpn_before.stdout_lines[0] }}"
+
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 0
+
+    - name: Check available OpenVPN version in apt
+      command: apt-cache policy openvpn
+      register: apt_policy
+      changed_when: false
+
+    - name: Display available version info
+      debug:
+        msg: "{{ apt_policy.stdout }}"
+
+    - name: Stop OpenVPN service before upgrade
+      systemd:
+        name: "openvpn-server@server"
+        state: stopped
+
+    - name: Upgrade OpenVPN package
+      apt:
+        name: openvpn
+        state: latest
+        only_upgrade: yes
+      register: openvpn_upgraded
+
+    - name: Upgrade EasyRSA if requested
+      block:
+        - name: Download new EasyRSA version
+          get_url:
+            url: "https://github.com/OpenVPN/easy-rsa/releases/download/v{{ new_easyrsa_version }}/EasyRSA-{{ new_easyrsa_version }}.tgz"
+            dest: "/tmp/easyrsa-{{ new_easyrsa_version }}.tgz"
+            mode: "0644"
+
+        - name: Extract new EasyRSA
+          unarchive:
+            src: "/tmp/easyrsa-{{ new_easyrsa_version }}.tgz"
+            dest: "/opt/"
+            remote_src: yes
+
+        - name: Update EasyRSA symlink
+          file:
+            src: "/opt/EasyRSA-{{ new_easyrsa_version }}"
+            dest: "{{ easyrsa_install_dir }}"
+            state: link
+            force: yes
+
+        - name: Confirm EasyRSA version
+          command: "{{ easyrsa_install_dir }}/easyrsa --version"
+          register: easyrsa_version_output
+          changed_when: false
+
+        - name: Display EasyRSA version
+          debug:
+            msg: "EasyRSA updated: {{ easyrsa_version_output.stdout }}"
+      when: update_easyrsa | bool
+
+    - name: Start OpenVPN service
+      systemd:
+        name: "openvpn-server@server"
+        state: started
+        daemon_reload: yes
+
+    - name: Wait for OpenVPN to start
+      wait_for:
+        port: "{{ openvpn_port }}"
+        protocol: "{{ openvpn_proto }}"
+        timeout: 30
+      ignore_errors: yes
+
+    - name: Get new OpenVPN version
+      command: openvpn --version
+      register: openvpn_after
+      changed_when: false
+
+    - name: Display update summary
+      debug:
+        msg:
+          - "=========================================="
+          - " OpenVPN Update Summary"
+          - "=========================================="
+          - " Before: {{ openvpn_before.stdout_lines[0] }}"
+          - " After:  {{ openvpn_after.stdout_lines[0] }}"
+          - " Status: {{ 'UPGRADED' if openvpn_upgraded.changed else 'Already up-to-date' }}"
+          - "=========================================="
+
+    - name: Check OpenVPN service status
+      command: systemctl status openvpn-server@server
+      register: service_status
+      changed_when: false
+      failed_when: false
+
+    - name: Warn if service is not running
+      fail:
+        msg: "WARNING: OpenVPN service is not running after update! Check logs: journalctl -u openvpn-server@server"
+      when: "'active (running)' not in service_status.stdout"

@@ -1,0 +1,69 @@
+# =============================================================================
+# Secrets and sensitive files - NEVER commit these!
+# =============================================================================
+
+# Terraform secrets (contains your DigitalOcean API token)
+terraform/terraform.tfvars
+
+# Terraform state files (use remote state for teams)
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/.terraform.tfstate.lock.info
+terraform/tfplan
+
+# Terraform provider plugins (downloaded by terraform init)
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+
+# Generated Ansible inventory (auto-created by Terraform)
+ansible/inventory/hosts.ini
+ansible/inventory/*.ini
+
+# Client configurations (contain private keys - keep these VERY private)
+clients/
+
+# Ansible retry files
+ansible/*.retry
+
+# =============================================================================
+# General development
+# =============================================================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# JetBrains
+.idea/
+*.iml
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+env/
+venv/
+.env/
+*.egg-info/
+dist/
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/

@@ -1,0 +1,62 @@
+# OpenVPN Client Configuration
+# Client: {{ openvpn_client_name }}
+# Server: {{ openvpn_server_address }}
+# Generated: {{ ansible_date_time.iso8601 }}
+# Do not share this file - it contains your private key!
+
+client
+dev tun
+proto {{ openvpn_proto }}
+
+# Server address and port
+remote {{ openvpn_server_address }} {{ openvpn_port }}
+
+{% if openvpn_enable_tcp | default(false) %}
+# Fallback TCP connection
+<connection>
+  remote {{ openvpn_server_address }} {{ openvpn_port_tcp | default(443) }} tcp
+</connection>
+{% endif %}
+
+# Don't bind to a local port
+nobind
+
+# Persist state across restarts
+persist-key
+persist-tun
+
+# Cipher settings (must match server)
+cipher {{ openvpn_cipher }}
+auth {{ openvpn_auth_digest }}
+tls-version-min {{ openvpn_tls_version_min }}
+
+# TLS client mode (tls-crypt key is embedded below)
+tls-client
+key-direction 1
+
+# Logging verbosity
+verb 3
+
+# Certificate verification
+remote-cert-tls server
+
+# Prevent DNS leaks on Linux
+# script-security 2
+# up /etc/openvpn/update-resolv-conf
+# down /etc/openvpn/update-resolv-conf
+
+<ca>
+{{ ca_cert_content.content | b64decode }}
+</ca>
+
+<cert>
+{{ client_cert_content.content | b64decode | regex_replace('(?s).*?(-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----)', '\\1') }}
+</cert>
+
+<key>
+{{ client_key_content.content | b64decode }}
+</key>
+
+<tls-crypt>
+{{ ta_key_content.content | b64decode }}
+</tls-crypt>

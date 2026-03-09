@@ -1,0 +1,118 @@
+---
+- name: Copy EasyRSA vars file
+  template:
+    src: vars.j2
+    dest: "{{ easyrsa_install_dir }}/vars"
+    mode: "0644"
+
+- name: Check if PKI is already initialized
+  stat:
+    path: "{{ easyrsa_install_dir }}/pki/ca.crt"
+  register: pki_initialized
+
+- name: Initialize EasyRSA PKI
+  command:
+    cmd: "{{ easyrsa_install_dir }}/easyrsa --batch init-pki"
+    chdir: "{{ easyrsa_install_dir }}"
+  when: not pki_initialized.stat.exists
+  environment:
+    EASYRSA_PKI: "{{ easyrsa_install_dir }}/pki"
+
+- name: Build CA (Certificate Authority)
+  command:
+    cmd: "{{ easyrsa_install_dir }}/easyrsa --batch build-ca nopass"
+    chdir: "{{ easyrsa_install_dir }}"
+  when: not pki_initialized.stat.exists
+  environment:
+    EASYRSA_PKI: "{{ easyrsa_install_dir }}/pki"
+    EASYRSA_REQ_CN: "OpenVPN-CA"
+
+- name: Check if server certificate exists
+  stat:
+    path: "{{ easyrsa_install_dir }}/pki/issued/server.crt"
+  register: server_cert_exists
+
+- name: Generate server certificate request
+  command:
+    cmd: "{{ easyrsa_install_dir }}/easyrsa --batch gen-req server nopass"
+    chdir: "{{ easyrsa_install_dir }}"
+  when: not server_cert_exists.stat.exists
+  environment:
+    EASYRSA_PKI: "{{ easyrsa_install_dir }}/pki"
+    EASYRSA_REQ_CN: "server"
+
+- name: Sign server certificate
+  command:
+    cmd: "{{ easyrsa_install_dir }}/easyrsa --batch sign-req server server"
+    chdir: "{{ easyrsa_install_dir }}"
+  when: not server_cert_exists.stat.exists
+  environment:
+    EASYRSA_PKI: "{{ easyrsa_install_dir }}/pki"
+
+- name: Check if DH params exist
+  stat:
+    path: "{{ easyrsa_install_dir }}/pki/dh.pem"
+  register: dh_params_exist
+
+- name: Generate Diffie-Hellman parameters (this may take a while)
+  command:
+    cmd: "{{ easyrsa_install_dir }}/easyrsa --batch gen-dh"
+    chdir: "{{ easyrsa_install_dir }}"
+  when: not dh_params_exist.stat.exists
+  environment:
+    EASYRSA_PKI: "{{ easyrsa_install_dir }}/pki"
+  async: 300
+  poll: 10
+
+- name: Check if TLS crypt key exists
+  stat:
+    path: "{{ openvpn_server_dir }}/ta.key"
+  register: ta_key_exists
+
+- name: Generate TLS crypt key (tls-crypt)
+  command:
+    cmd: "openvpn --genkey secret {{ openvpn_server_dir }}/ta.key"
+  when: not ta_key_exists.stat.exists
+
+- name: Copy CA certificate to OpenVPN server dir
+  copy:
+    src: "{{ easyrsa_install_dir }}/pki/ca.crt"
+    dest: "{{ openvpn_server_dir }}/ca.crt"
+    remote_src: yes
+    mode: "0644"
+
+- name: Copy server certificate to OpenVPN server dir
+  copy:
+    src: "{{ easyrsa_install_dir }}/pki/issued/server.crt"
+    dest: "{{ openvpn_server_dir }}/server.crt"
+    remote_src: yes
+    mode: "0644"
+
+- name: Copy server key to OpenVPN server dir
+  copy:
+    src: "{{ easyrsa_install_dir }}/pki/private/server.key"
+    dest: "{{ openvpn_server_dir }}/server.key"
+    remote_src: yes
+    mode: "0600"
+
+- name: Copy DH parameters to OpenVPN server dir
+  copy:
+    src: "{{ easyrsa_install_dir }}/pki/dh.pem"
+    dest: "{{ openvpn_server_dir }}/dh.pem"
+    remote_src: yes
+    mode: "0644"
+
+- name: Generate CRL (Certificate Revocation List)
+  command:
+    cmd: "{{ easyrsa_install_dir }}/easyrsa --batch gen-crl"
+    chdir: "{{ easyrsa_install_dir }}"
+  environment:
+    EASYRSA_PKI: "{{ easyrsa_install_dir }}/pki"
+  changed_when: false
+
+- name: Copy CRL to OpenVPN server dir
+  copy:
+    src: "{{ easyrsa_install_dir }}/pki/crl.pem"
+    dest: "{{ openvpn_server_dir }}/crl.pem"
+    remote_src: yes
+    mode: "0644"

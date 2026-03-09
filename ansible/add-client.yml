@@ -1,0 +1,54 @@
+---
+# =============================================================================
+# Add OpenVPN Client Playbook
+# Creates a new client certificate and generates a .ovpn config file.
+#
+# Usage:
+#   ansible-playbook add-client.yml --extra-vars "client_name=mydevice"
+#   # Or using the helper script:
+#   ./scripts/add-client.sh mydevice
+# =============================================================================
+
+- name: Add OpenVPN Client
+  hosts: openvpn_servers
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+    - name: Validate client_name variable
+      fail:
+        msg: |
+          ERROR: 'client_name' is required.
+          Usage: ansible-playbook add-client.yml --extra-vars "client_name=mydevice"
+      when: client_name is not defined or client_name | length == 0
+
+    - name: Validate client name format
+      fail:
+        msg: "Client name '{{ client_name }}' is invalid. Use only alphanumeric characters, hyphens, and underscores."
+      when: not client_name is match('^[a-zA-Z0-9_-]+$')
+
+    - name: Display client creation info
+      debug:
+        msg:
+          - "Creating OpenVPN client: {{ client_name }}"
+          - "Server: {{ ansible_host }}"
+
+  roles:
+    - role: openvpn_client
+      tags: [client, add-client]
+
+  post_tasks:
+    - name: Client creation summary
+      debug:
+        msg:
+          - "=========================================="
+          - " Client Created Successfully!"
+          - "=========================================="
+          - " Client name: {{ client_name }}"
+          - " Config file: clients/{{ client_name }}/{{ client_name }}.ovpn"
+          - ""
+          - " Import this file into:"
+          - "  - OpenVPN Connect (iOS/Android/Windows/macOS)"
+          - "  - Tunnelblick (macOS)"
+          - "  - NetworkManager (Linux)"
+          - "=========================================="
