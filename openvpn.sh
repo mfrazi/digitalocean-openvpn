@@ -70,8 +70,10 @@ require_setup() {
 # State (persisted server configuration)
 # =============================================================================
 load_state() {
-  # shellcheck disable=SC1090
-  [ -f "$STATE_FILE" ] && source "$STATE_FILE"
+  if [ -f "$STATE_FILE" ]; then
+    # shellcheck disable=SC1090
+    source "$STATE_FILE"
+  fi
 }
 
 save_state() {
