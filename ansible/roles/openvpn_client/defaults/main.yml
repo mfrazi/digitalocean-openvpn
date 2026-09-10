@@ -1,8 +1,0 @@
----
-# Client role defaults
-openvpn_client_name: ""          # Required: set via --extra-vars "client_name=mydevice"
-openvpn_clients_dir: "/etc/openvpn/clients"
-openvpn_local_clients_dir: "{{ playbook_dir }}/../clients"
-easyrsa_install_dir: "/opt/easy-rsa"
-openvpn_server_dir: "/etc/openvpn/server"
-openvpn_cert_expire: 1080
